@@ -10,6 +10,7 @@ type Definitions []Definition
 // Definition is
 type Definition interface {
 	Node
+	definition()
 }
 
 type OperationType uint8
@@ -36,6 +37,9 @@ type FragmentDefinition struct {
 	SelectionSet SelectionSet
 }
 
+func (*FragmentDefinition) definition()  {}
+func (*OperationDefinition) definition() {}
+
 type Variables []Variable
 type Variable struct {
 	Name     string
@@ -48,6 +52,7 @@ type Variable struct {
 
 type SelectionSet []Selection
 type Selection interface {
+	Node
 	selection()
 }
 
@@ -81,6 +86,7 @@ type Directive struct {
 }
 
 type Value interface {
+	Node
 	Value() interface{}
 }
 
@@ -104,21 +110,4 @@ func (v ObjectValue) Value() interface{}   { return v }
 
 // Node interface
 type Node interface {
-	node()
-	// String() string
 }
-
-func (*Document) node()            {}
-func (*OperationDefinition) node() {}
-func (*FragmentDefinition) node()  {}
-func (*SelectionSet) node()        {}
-func (*Arguments) node()           {}
-func (*Field) node()               {}
-func (*Directive) node()           {}
-func (*IntValue) node()            {}
-func (*FloatValue) node()          {}
-func (*StringValue) node()         {}
-func (*EnumValue) node()           {}
-func (*BooleanValue) node()        {}
-func (*ListValue) node()           {}
-func (*ObjectValue) node()         {}
