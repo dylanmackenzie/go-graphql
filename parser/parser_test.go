@@ -120,6 +120,14 @@ var parseTests = map[string]ParseTest{
 			}
 		}
 	`},
+	"ObjectValue": {`
+		query ObjectValue {
+			profiles(q: {name: "brian", color: "blue"}) {
+				name,
+				address
+			}
+		}
+	`},
 }
 
 func TestParser(t *testing.T) {
@@ -127,9 +135,8 @@ func TestParser(t *testing.T) {
 		actual, err := Reader(strings.NewReader(test.input))
 		if err != nil {
 			t.Errorf("Error %s: %s", name, err)
+			json, _ := json.MarshalIndent(actual, "", "  ")
+			t.Logf("%s, %s\n", name, json)
 		}
-
-		json, _ := json.MarshalIndent(actual, "", "  ")
-		t.Logf("%s, %s\n", name, json)
 	}
 }
