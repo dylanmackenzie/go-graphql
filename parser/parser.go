@@ -71,7 +71,7 @@ func parseOperationDefinition(def *OperationDefinition, lex *lexer) error {
 		return errors.New("Expected Name in Operation Definition")
 	}
 
-	// Variable Declarations
+	// Variable Definitions
 	if lex.Optional(tokenLeftParen) {
 		if err := parseVariableDefinitions(&def.Variables, lex); err != nil {
 			return err
@@ -276,7 +276,7 @@ func parseArguments(args *Arguments, lex *lexer) error {
 
 			v, err := parseValue(lex)
 			if err != nil {
-				return errors.New("Argument key without value")
+				return err
 			}
 
 			arg.Value = v
@@ -328,11 +328,11 @@ func parseVariableDefinitions(vars *Variables, lex *lexer) error {
 
 			// Default Value(Optional)
 			if lex.Optional(tokenEqual) {
-				if lex.ExpectFunc(isValue) {
-					_, v.Default = lex.last()
-				} else {
-					return errors.New("Default Value missing value")
+				def, err := parseValue(lex)
+				if err != nil {
+					return err
 				}
+				v.Default = def
 			}
 
 			*vars = append(*vars, *v)
@@ -381,22 +381,24 @@ func parseValue(lex *lexer) (Value, error) {
 		if err != nil {
 			return nil, errors.New("Invalid integer literal")
 		}
-		return IntValue{num}, nil
+		return IntValue(num), nil
 	case tokenFloatValue:
 		num, err := strconv.ParseFloat(lit, 64)
 		if err != nil {
 			return nil, errors.New("Invalid integer literal")
 		}
-		return FloatValue{num}, nil
+		return FloatValue(num), nil
 	case tokenStringValue:
-		return StringValue{lit}, nil
+		return StringValue(lit), nil
+	case tokenVariableValue:
+		return VariableValue(lit), nil
 	case tokenName:
 		if lit == "true" || lit == "false" {
-			return BooleanValue{lit == "true"}, nil
+			return BooleanValue(lit == "true"), nil
 		} else if lit == "null" {
 			return nil, errors.New("Value cannot be null")
 		} else {
-			return EnumValue{lit}, nil
+			return EnumValue(lit), nil
 		}
 	case tokenLeftCurly:
 		obj, err := parseObjectValue(lex)
@@ -411,7 +413,7 @@ func parseValue(lex *lexer) (Value, error) {
 		}
 		return list, nil
 	default:
-		return nil, errors.New("Argument key without value")
+		return nil, errors.New("Invalid value")
 	}
 }
 
@@ -419,20 +421,15 @@ func parseListValue(lex *lexer) (ListValue, error) {
 	val := ListValue{}
 
 	for {
-		switch tok, lit := lex.Advance(); {
-		case tok == tokenIllegal:
-			return val, errors.New(lit)
-		case tok == tokenEOF:
-			return val, errors.New("Unclosed list value")
-		case tok == tokenRightBracket:
+		if lex.Optional(tokenRightBracket) {
 			return val, nil
-		default:
-			item, err := parseValue(lex)
-			if err != nil {
-				return val, err
-			}
-			val.Val = append(val.Val, item)
 		}
+
+		item, err := parseValue(lex)
+		if err != nil {
+			return val, err
+		}
+		val = append(val, item)
 	}
 }
 
@@ -441,28 +438,23 @@ func parseObjectValue(lex *lexer) (ObjectValue, error) {
 	val := ObjectValue{}
 
 	for {
-		switch tok, lit := lex.Advance(); {
-		case tok == tokenIllegal:
-			return val, errors.New(lit)
-		case tok == tokenEOF:
-			return val, errors.New("Unclosed object value")
-		case tok == tokenRightCurly:
+		if lex.Optional(tokenRightCurly) {
 			return val, nil
-		default:
-			if !lex.Expect(tokenName) {
-				return val, errors.New("ObjectValue must have a key")
-			}
-
-			_, key = lex.last()
-			if !lex.Expect(tokenColon) {
-				return val, errors.New("ObjectValue must have a value")
-			}
-
-			item, err := parseValue(lex)
-			if err != nil {
-				return val, err
-			}
-			val.Val[key] = item
 		}
+
+		if !lex.Expect(tokenName) {
+			return val, errors.New("ObjectValue must have a key")
+		}
+
+		_, key = lex.last()
+		if !lex.Expect(tokenColon) {
+			return val, errors.New("ObjectValue must have a value")
+		}
+
+		item, err := parseValue(lex)
+		if err != nil {
+			return val, err
+		}
+		val[key] = item
 	}
 }

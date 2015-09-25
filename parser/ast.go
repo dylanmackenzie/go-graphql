@@ -41,7 +41,7 @@ type Variable struct {
 	Name     string
 	Type     string
 	Nullable bool
-	Default  string
+	Default  Value
 }
 
 // Selection
@@ -84,21 +84,23 @@ type Value interface {
 	Value() interface{}
 }
 
-type IntValue struct{ Val int }
-type FloatValue struct{ Val float64 }
-type StringValue struct{ Val string }
-type EnumValue struct{ Val string }
-type BooleanValue struct{ Val bool }
-type ListValue struct{ Val []Value }
-type ObjectValue struct{ Val map[string]Value }
+type VariableValue string
+type IntValue int
+type FloatValue float64
+type StringValue string
+type EnumValue string
+type BooleanValue bool
+type ListValue []Value
+type ObjectValue map[string]Value
 
-func (v IntValue) Value() interface{}     { return v.Val }
-func (v FloatValue) Value() interface{}   { return v.Val }
-func (v StringValue) Value() interface{}  { return v.Val }
-func (v EnumValue) Value() interface{}    { return v.Val }
-func (v BooleanValue) Value() interface{} { return v.Val }
-func (v ListValue) Value() interface{}    { return v.Val }
-func (v ObjectValue) Value() interface{}  { return v.Val }
+func (v VariableValue) Value() interface{} { return v }
+func (v IntValue) Value() interface{}      { return v }
+func (v FloatValue) Value() interface{}    { return v }
+func (v StringValue) Value() interface{}   { return v }
+func (v EnumValue) Value() interface{}     { return v }
+func (v BooleanValue) Value() interface{}  { return v }
+func (v ListValue) Value() interface{}     { return v }
+func (v ObjectValue) Value() interface{}   { return v }
 
 // Node interface
 type Node interface {
