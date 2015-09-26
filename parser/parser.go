@@ -17,8 +17,18 @@ func Reader(r io.Reader) (Document, error) {
 			Name:   "",
 			OpType: QUERY,
 		}
+
 		doc.Definitions = append(doc.Definitions, def)
-		return doc, parseSelectionSet(&def.SelectionSet, lex)
+		if err := parseSelectionSet(&def.SelectionSet, lex); err != nil {
+			return doc, err
+		}
+
+		// Ensure that shorthand is the only definition in the document
+		if !lex.Expect(tokenEOF) {
+			return doc, errors.New("Shorthand definition must alone in document")
+		}
+
+		return doc, nil
 	}
 
 	// Otherwise we have a normal document
