@@ -6,6 +6,7 @@ import (
 
 var eof = rune(0)
 
+//go:generate stringer -type=token
 type token uint8
 
 const (
@@ -46,47 +47,6 @@ const (
 	tokenRightParen
 	tokenSpread
 )
-
-var tokenNames = []string{
-	"Illegal",
-	"EOF",
-
-	// Ignored
-	"Ignored",
-	"Comma",
-	"Whitespace",
-	"LineTerminator",
-
-	"Name", // /[_A-Za-z][_0-9A-Za-z]*/
-
-	// Values
-	"VariableValue",
-	"IntValue",
-	"FloatValue",
-	"StringValue",
-
-	// Punctuators
-	"At",
-	"Colon",
-	"Dollar",
-	"Equal",
-	"Exclam",
-	"LeftBracket",
-	"RightBracket",
-	"LeftCurly",
-	"RightCurly",
-	"LeftParen",
-	"RightParen",
-	"Spread",
-}
-
-func (tok token) String() string {
-	if tok > tokenSpread {
-		return ""
-	} else {
-		return tokenNames[tok]
-	}
-}
 
 func isTerminal(tok token) bool {
 	return tok <= tokenEOF
