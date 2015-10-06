@@ -1,99 +1,125 @@
 package execution
 
 import (
-	"net/url"
+	"errors"
+	"fmt"
 
 	"dylanmackenzie.com/graphql/ast"
 	"dylanmackenzie.com/graphql/schema"
 )
 
-type Context struct {
-	Schema schema.Schema
-	Root   schema.Object
+type context struct {
+	// Schema
 
-	Operation      *ast.OperationDefinition
-	VariableValues map[string]ast.Value
-	Fragments      map[string]*ast.FragmentDefinition
+	Schema *schema.Schema            // A reference to the graphql type system.
+	Root   *schema.ObjectDescription // The root object in the schema responsible for the active operation.
+
+	// Document
+
+	Operation      *ast.OperationDefinition           // The active operation.
+	VariableValues map[string]ast.Value               // The variables supplied to the graphql request.
+	Fragments      map[string]*ast.FragmentDefinition // The fragments present in the graphql document.
+
+	// Response
+
+	// The root response node
+	Response *ResponseNode
+
+	// Error Handling
+
+	Errors []error // The list of errors encountered while processing the request.
+
+	// A boolean indicating whether the execution should panic
+	// immediately after the first error it encounters or continue
+	// parsing the entire document. Should be set to true only for
+	// development purposes.
+	lazyPanic bool
 }
 
-// Build an execution context from a schema, graphql document, and a
-// string naming the active definition in the document (which must be the empty
-// string if the client did not specify an operation name).
-func NewContext(sch schema.Schema, doc *ast.Document, active string) (*Context, error) {
-	ctx := &Context{Schema: sch}
-
-	if err := ctx.separateDefinitions(doc, active); err != nil {
-		return nil, err
+func NewContext(sch *schema.Schema) *context {
+	return &context{
+		Schema:         sch,
+		VariableValues: make(map[string]ast.Value),
+		Fragments:      make(map[string]*ast.FragmentDefinition),
+		Errors:         make([]Errors, 0),
 	}
+}
 
-	if err := ctx.getOperationRootType(); err != nil {
-		return nil, err
+func (ctx *context) addError(err error) {
+	ctx.Errors = append(ctx.Errors, err)
+	if !ctx.lazyPanic {
+		panic(ctx.Errors)
 	}
+}
 
-	return ctx, nil
+func report(ctx Context, s string, v ...interface{}) {
+	ctx.addError(fmt.Errorf(s, v...))
 }
 
 // getOperationRootType finds the appropriate root in the schema for the
-// active GraphQL operation.
-func (ctx *Context) getOperationRootType() error {
+// active GraphQL operation and stores it in ctx.Root
+func (ctx *context) getOperationRootType() {
 	switch ctx.Operation.OpType {
 	case QUERY:
 		ctx.Root = ctx.Schema.QueryRoot
 	case MUTATION:
 		ctx.Root = ctx.Schema.MutationRoot
 	default:
-		return errors.New("Operation Type must be either query or mutation")
+		// This should be caught in the parsing stage
+		report(ctx, "Operation Type must be either query or mutation")
 	}
 
 	if ctx.Root == nil {
-		return nil, errors.New("Schema does not provide a root object for the selected operation")
+		report(ctx, "Schema does not provide a root object for the selected operation")
 	}
-
-	return nil
 }
 
-// separateDefinitions collects all top level fragments and finds the
-// active operation of the given document, storing it in ctx
-func (ctx *Context) separateDefinitions(doc *ast.Document, active string) error {
-	cnt := 0
-	for i, def := range doc.Definitions {
-		if op, ok := def.(*ast.OperationFragment); ok {
-			if _, exists := ctx.Fragments[op.Name]; exists {
-				return errors.New("Multiple fragments with same name")
+// processDefininition collects all top level fragments and finds the
+// active operation of the given document, storing it in ctx, while
+// ensuring the uniqueness of all definitions. Covers sections 5.1 and
+// 5.4.1 of Validation.
+func (ctx *context) processDefinitions(doc *ast.Document, active string) {
+	foundOps := make(map[string]bool, len(doc.Definitions))
+	opCount := 0
+	for _, t := range doc.Definitions {
+		switch def := t.(type) {
+		case *ast.OperationDefinition:
+			if foundOps[def.Name] {
+				report(ctx, "Multiple operations named '%s'", def.Name)
+				break
 			}
-			ctx.Fragments[op.Name] = op
-		}
 
-		op := def.(*ast.OperationDefinition)
+			opCount++
+			foundOps[def.Name] = def
 
-		if op.Name == active && active != "" {
-			ctx.Operation = op
-			continue
-		}
+			// Check unnamed fragment count
+			if def.Name == "" && opCount != 1 {
+				report(ctx, "Unnamed operation must be the only one in a document")
+			}
 
-		cnt++
-		if cnt == 1 && active == "" {
-			ctx.Operation = op
+			if def.Name == active {
+				ctx.Operation = def
+			}
+
+		case *ast.FragmentDefinition:
+			if _, ok := ctx.Fragments[def.Name]; ok {
+				report(ctx, "Multiple fragments named '%s'", def.Name)
+			} else {
+				ctx.Fragments[def.Name] = def
+			}
 		}
 	}
 
-	if active != "" { // If we supplied a name to the search, ensure we had a match
-		if ctx.Operation != nil {
-			return nil
+	if ctx.Operation == nil {
+		if active == "" {
+			report(ctx, "Expecting unnamed definition, but none found")
 		} else {
-			return errors.New("No operation with given name found in document")
-		}
-	} else { // Otherwise ensure exactly one operation was present
-		if ctx.Operation != nil && cnt == 1 {
-			return nil
-		} else {
-			return errors.New("Document did not contain exactly one operation")
-
+			report(ctx, "Expecting definition named '%s', but none found", active)
 		}
 	}
 }
 
 // ParseVariablesFromJSON parses a set of GraphQL variables from a JSON string
-func (ctx *Context) ParseVariablesFromJSON(json string) error {
+func (ctx *context) ParseVariablesFromJSON(json string) error {
 	return nil
 }
