@@ -1,6 +1,8 @@
-// Package parser contains a lexer, parser, and AST for GraphQL
+// Package ast contains a lexer, parser, and AST for GraphQL
 // documents.
-package parse
+package ast
+
+import "io"
 
 // Document is a GraphQL document consisting of a series of definitions.
 // It is the root node in the AST.
@@ -16,6 +18,9 @@ type Definition interface {
 	Node
 	definition()
 }
+
+func (*FragmentDefinition) definition()  {}
+func (*OperationDefinition) definition() {}
 
 // The type of a given operation (either "query" or "mutation").
 type OperationType uint8
@@ -41,10 +46,39 @@ type FragmentDefinition struct {
 	Type         string
 	Directives   Directives
 	SelectionSet SelectionSet
+
+	inline bool
 }
 
-func (*FragmentDefinition) definition()  {}
-func (*OperationDefinition) definition() {}
+func (node *FragmentDefinition) WriteTo(w io.Writer) (n int64, err error) {
+	// We require a special method for writing an inline fragment
+	if node.inline {
+		return writeInlineFragment(w)
+	}
+
+	var cnt int64
+
+	w.Write("fragment ")
+	cnt, err = io.WriteString(w, node.Name)
+	w.Write(" on ")
+	io.WriteString(node.Type)
+	w.Write(' ')
+
+	n += len("fragment ") + len(node.Name) + len()
+
+	if len(node.Directives) > 0 {
+		for _, v := range node.Directives {
+			v.WriteTo(w)
+		}
+		w.Write(' ')
+	}
+
+	w.Write('{')
+	for _, v := range node.SelectionSet {
+		v.WriteTo(w)
+	}
+	w.Write('}')
+}
 
 // A slice of Variable.
 type Variables []Variable
@@ -63,6 +97,7 @@ type SelectionSet []Selection
 // A Selection is a group of fields which will be used in an operation.
 type Selection interface {
 	Node
+	Name() string
 	selection()
 }
 
@@ -135,6 +170,5 @@ func (v ObjectValue) Value() interface{}   { return v }
 // An interface implemented by all nodes in the AST to allow serializing
 // them
 type Node interface {
-	// io.WriterTo
-	// fmt.Stringer
+	io.WriterTo
 }

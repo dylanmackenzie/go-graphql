@@ -3,7 +3,7 @@ package execution
 import (
 	"net/url"
 
-	ast "dylanmackenzie.com/graphql/parser"
+	"dylanmackenzie.com/graphql/ast"
 	"dylanmackenzie.com/graphql/schema"
 )
 
