@@ -1,17 +1,25 @@
-package execution
+package schema
+
+import (
+	"errors"
+	"log"
+	"sync"
+
+	"dylanmackenzie.com/graphql/result"
+)
 
 type ResponseNode struct {
 	// The runtime type of the object which is being resolved by this
 	// response node.
-	runtimeType *schema.ObjectDescriptor
+	descriptor AbstractDescriptor
 
 	// A map containing data about the object currently being resolved.
 	// Leaf fields will be resolved automatically by the value in this
 	// map corresponding to their name.
-	untypedMap
+	result.Map
 
 	Fields []string   // List of fields that must be resolved.
-	Args   untypedMap // The arguments for the current node.
+	Args   result.Map // The arguments for the current node.
 
 	parent   *ResponseNode   // The ResponseNode that initiated this one.
 	children []*ResponseNode // All Response nodes initiated by this one.
@@ -22,26 +30,32 @@ type ResponseNode struct {
 
 // Internal constructor for a response node. Only for initializing the
 // map and slice types which should never be nil. The WaitGroup and
-// runtimeType must be populated by the caller.
-func newResponseNode(parent *ResponseNode) *ResponseNode {
+// descriptor must be populated by the caller.
+func newResponseNode(parent *ResponseNode, name string) (*ResponseNode, error) {
 	node := &ResponseNode{
-		Fields:     make([]string),
-		Args:       make(map[string]interface{}),
-		untypedMap: make(map[string]interface{}),
-		Children:   make([]*ResponseNode),
-		Parent:     parent,
+		Fields:   make([]string, 0),
+		Args:     make(map[string]interface{}),
+		Map:      make(map[string]interface{}),
+		children: make([]*ResponseNode, 0),
+		parent:   parent,
+		wg:       new(sync.WaitGroup),
 	}
 
 	if parent != nil {
-		parent.Children = append(parent.Children, node)
+		parent.children = append(parent.children, node)
+		field, found := parent.descriptor.Field(name)
+		if !found {
+			return nil, errors.New("No field found by given name")
+		}
+		node.descriptor = field.Result.(AbstractDescriptor)
 	}
 
-	return node
+	return node, nil
 }
 
 func (r *ResponseNode) panicIfResolved() {
 	if r.resolved {
-		log.Panicf("Response for field '%s' has already been resolved", r.runtimeType.Name())
+		log.Panicf("Response for field '%s' has already been resolved", r.descriptor.Name())
 	}
 }
 
@@ -49,5 +63,4 @@ func (r *ResponseNode) panicIfResolved() {
 func (r *ResponseNode) resolve() {
 	r.panicIfResolved()
 	r.resolved = true
-	wg.Done()
 }

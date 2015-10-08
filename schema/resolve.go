@@ -1,4 +1,8 @@
-package execution
+package schema
+
+import (
+	"dylanmackenzie.com/graphql/result"
+)
 
 // ResolveFunc is a callback which resolves the selection set of a
 // GraphQL Object.
@@ -7,9 +11,9 @@ package execution
 // is itself the result of a ResolveFunc higher up the tree. From there,
 // a ResolveFunc should send Response objects into the channel until
 // it has processed all fields.
-type ResolveFunc func(r *ResponseNode)
+type ResolveFunc func(r *result.Map)
 
 // Resolver is the interface for a struct which implements a ResolveFunc
 type Resolver interface {
-	ResolveGraphQL(r *ResponseNode)
+	ResolveGraphQL(r *result.Map)
 }

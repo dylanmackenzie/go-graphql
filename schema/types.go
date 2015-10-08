@@ -1,5 +1,11 @@
 package schema
 
+import (
+	"bytes"
+
+	"dylanmackenzie.com/graphql/ast"
+)
+
 //go:generate stringer -type=Kind
 type Kind int
 
@@ -23,17 +29,18 @@ type Descriptor interface {
 }
 
 type AbstractDescriptor interface {
+	Descriptor
 	Field(string) (*Field, bool)
 }
 
 // Leaf types
 type ScalarDescriptor struct {
-	Name string
+	name string
 	Kind Kind
 }
 
 type EnumDescriptor struct {
-	Name   string
+	name   string
 	Values map[string]int
 }
 
@@ -46,14 +53,14 @@ type Field struct {
 }
 
 type ObjectDescriptor struct {
-	Name       string
+	name       string
 	Fields     []Field
 	Implements []*InterfaceDescriptor
 }
 
 // Convenience method for finding a field by name
 func (obj *ObjectDescriptor) Field(name string) (*Field, bool) {
-	for _, field := range obj.Fields {
+	for i, field := range obj.Fields {
 		if field.Name == name {
 			return &obj.Fields[i], true
 		}
@@ -63,13 +70,13 @@ func (obj *ObjectDescriptor) Field(name string) (*Field, bool) {
 }
 
 type InterfaceDescriptor struct {
-	Name   string
+	name   string
 	Fields []Field
 }
 
 // Convenience method for finding a field by name
 func (obj *InterfaceDescriptor) Field(name string) (*Field, bool) {
-	for _, field := range obj.Fields {
+	for i, field := range obj.Fields {
 		if field.Name == name {
 			return &obj.Fields[i], true
 		}
@@ -79,7 +86,7 @@ func (obj *InterfaceDescriptor) Field(name string) (*Field, bool) {
 }
 
 type UnionDescriptor struct {
-	Name    string
+	name    string
 	Members []*ObjectDescriptor
 }
 
@@ -102,15 +109,15 @@ type InputObjectDescriptor struct {
 // Abstract types must have pointer receivers because they could be
 // self-referential.
 
-func (t *ScalarDescriptor) Name() string      { return t.Name }
+func (t *ScalarDescriptor) Name() string      { return t.name }
 func (t *ScalarDescriptor) Nullable() bool    { return true }
-func (t *EnumDescriptor) Name() string        { return t.Name }
+func (t *EnumDescriptor) Name() string        { return t.name }
 func (t *EnumDescriptor) Nullable() bool      { return true }
-func (t *ObjectDescriptor) Name() string      { return t.Name }
+func (t *ObjectDescriptor) Name() string      { return t.name }
 func (t *ObjectDescriptor) Nullable() bool    { return true }
-func (t *InterfaceDescriptor) Name() string   { return t.Name }
+func (t *InterfaceDescriptor) Name() string   { return t.name }
 func (t *InterfaceDescriptor) Nullable() bool { return true }
-func (t *UnionDescriptor) Name() string       { return t.Name }
+func (t *UnionDescriptor) Name() string       { return t.name }
 func (t *UnionDescriptor) Nullable() bool     { return true }
 func (t *NonNullDescriptor) Name() string     { return t.OfType.Name() + "!" }
 func (t *NonNullDescriptor) Nullable() bool   { return false }
@@ -125,22 +132,23 @@ func (t *InputObjectDescriptor) Name() string {
 			buf.WriteString(",")
 		}
 
+		buf.WriteString(k)
 		buf.WriteString(":")
 		buf.WriteString(v.Name())
 		first = false
 	}
 	buf.WriteString("}")
-
+	return buf.String()
 }
 func (t *InputObjectDescriptor) Nullable() bool { return true }
 
 // Predefined Scalar Types
 var (
-	IntType     = &ScalarDescriptor{Name: "Int", Kind: Int}
-	FloatType   = &ScalarDescriptor{Name: "Fload", Kind: Float}
-	StringType  = &ScalarDescriptor{Name: "String", Kind: String}
-	BooleanType = &ScalarDescriptor{Name: "Boolean", Kind: Boolean}
-	IDType      = &ScalarDescriptor{Name: "ID", Kind: String}
+	IntType     = &ScalarDescriptor{name: "Int", Kind: Int}
+	FloatType   = &ScalarDescriptor{name: "Fload", Kind: Float}
+	StringType  = &ScalarDescriptor{name: "String", Kind: String}
+	BooleanType = &ScalarDescriptor{name: "Boolean", Kind: Boolean}
+	IDType      = &ScalarDescriptor{name: "ID", Kind: String}
 )
 
 // Cache of composite type descriptors so that types can be compared by
@@ -151,7 +159,7 @@ var cache = map[string]Descriptor{}
 // Composite Constructors
 func NonNullOf(desc Descriptor) Descriptor {
 	t := &NonNullDescriptor{OfType: desc}
-	name := t.(Descriptor).Name()
+	name := t.Name()
 	if cached, ok := cache[name]; ok {
 		return cached
 	}
@@ -162,7 +170,7 @@ func NonNullOf(desc Descriptor) Descriptor {
 
 func ListOf(desc Descriptor) Descriptor {
 	t := &ListDescriptor{OfType: desc}
-	name := t.(Descriptor).Name()
+	name := t.Name()
 	if cached, ok := cache[name]; ok {
 		return cached
 	}
@@ -173,7 +181,7 @@ func ListOf(desc Descriptor) Descriptor {
 
 func InputObjectOf(m map[string]Descriptor) Descriptor {
 	t := &InputObjectDescriptor{Fields: m}
-	name := t.(Descriptor).Name()
+	name := t.Name()
 	if cached, ok := cache[name]; ok {
 		return cached
 	}
@@ -198,16 +206,12 @@ func IsAbstractType(desc Descriptor) bool {
 	case *ObjectDescriptor, *InterfaceDescriptor, *UnionDescriptor:
 		return true
 	case *ListDescriptor:
-		return isAbstractType(t.OfType)
+		return IsAbstractType(t.OfType)
 	case *NonNullDescriptor:
-		return isAbstractType(t.OfType)
+		return IsAbstractType(t.OfType)
 	default:
 		return false
 	}
-}
-
-func IsInputType(t Descriptor) bool {
-	return !IsAbstractType
 }
 
 // Type Coercion
@@ -218,4 +222,5 @@ func IsCoercible(v ast.Value, desc Descriptor) bool {
 
 	}
 
+	return true
 }
