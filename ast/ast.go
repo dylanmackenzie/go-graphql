@@ -2,7 +2,24 @@
 // documents.
 package ast
 
-import "io"
+import (
+	"bytes"
+	"reflect"
+)
+
+// The type of a given operation (either "query" or "mutation").
+type OperationType uint8
+
+const (
+	QUERY OperationType = iota
+	MUTATION
+)
+
+// An interface implemented by all nodes in the AST to allow serializing
+// them
+type Node interface {
+	//io.WriterTo
+}
 
 // Document is a GraphQL document consisting of a series of definitions.
 // It is the root node in the AST.
@@ -18,17 +35,6 @@ type Definition interface {
 	Node
 	definition()
 }
-
-func (*FragmentDefinition) definition()  {}
-func (*OperationDefinition) definition() {}
-
-// The type of a given operation (either "query" or "mutation").
-type OperationType uint8
-
-const (
-	QUERY OperationType = iota
-	MUTATION
-)
 
 // A Definition representing some type of operation on the dataset.
 type OperationDefinition struct {
@@ -50,36 +56,6 @@ type FragmentDefinition struct {
 	inline bool
 }
 
-func (node *FragmentDefinition) WriteTo(w io.Writer) (n int64, err error) {
-	// We require a special method for writing an inline fragment
-	if node.inline {
-		return writeInlineFragment(w)
-	}
-
-	var cnt int64
-
-	w.Write("fragment ")
-	cnt, err = io.WriteString(w, node.Name)
-	w.Write(" on ")
-	io.WriteString(node.Type)
-	w.Write(' ')
-
-	n += len("fragment ") + len(node.Name) + len()
-
-	if len(node.Directives) > 0 {
-		for _, v := range node.Directives {
-			v.WriteTo(w)
-		}
-		w.Write(' ')
-	}
-
-	w.Write('{')
-	for _, v := range node.SelectionSet {
-		v.WriteTo(w)
-	}
-	w.Write('}')
-}
-
 // A slice of Variable.
 type Variables []Variable
 
@@ -97,13 +73,8 @@ type SelectionSet []Selection
 // A Selection is a group of fields which will be used in an operation.
 type Selection interface {
 	Node
-	Name() string
 	selection()
 }
-
-func (*Field) selection()              {}
-func (*FragmentSpread) selection()     {}
-func (*FragmentDefinition) selection() {}
 
 // A Field is a discrete piece of information about an object in the
 // dataset.
@@ -142,6 +113,8 @@ type Directive struct {
 	Arguments Arguments
 }
 
+// Values
+
 // A Value is a container that can hold any data type suitable for an
 // argument.
 type Value interface {
@@ -167,8 +140,118 @@ func (v BooleanValue) Value() interface{}  { return v }
 func (v ListValue) Value() interface{}     { return v }
 func (v ObjectValue) Value() interface{}   { return v }
 
-// An interface implemented by all nodes in the AST to allow serializing
-// them
-type Node interface {
-	io.WriterTo
+// Types
+
+type ScalarDefinition struct {
+	Name string
+	Kind reflect.Kind
 }
+
+type EnumDefinition struct {
+	Name   string
+	Values map[string]int
+}
+
+type ObjectDefinition struct {
+	Name       string
+	Fields     TypeFields
+	Implements []string
+}
+
+type InterfaceDefinition struct {
+	Name   string
+	Fields TypeFields
+}
+
+type UnionDefinition struct {
+	Name    string
+	Members []string
+}
+
+type TypeFields []TypeField
+type TypeField struct {
+	Name      string
+	Type      Type
+	Arguments ArgumentDeclarations
+}
+
+type ArgumentDeclarations []ArgumentDeclaration
+type ArgumentDeclaration struct {
+	Key  string
+	Type Type
+}
+
+func (obj *InterfaceDefinition) Field(name string) (*TypeField, bool) {
+	return findTypeField(obj.Fields, name)
+}
+func (obj *ObjectDefinition) Field(name string) (*TypeField, bool) {
+	return findTypeField(obj.Fields, name)
+}
+func findTypeField(fields []TypeField, name string) (*TypeField, bool) {
+	for i, field := range fields {
+		if field.Name == name {
+			return &fields[i], true
+		}
+	}
+
+	return nil, false
+}
+
+// Input types
+
+type Type interface {
+	Name() string
+	Nullable() bool
+}
+
+type BaseType struct {
+	name     string
+	nullable bool
+}
+
+type ListType struct {
+	ofType   Type
+	nullable bool
+}
+
+type InputObjectType struct {
+	fields   map[string]Type
+	nullable bool
+}
+
+func (t *BaseType) Nullable() bool        { return t.nullable }
+func (t *BaseType) Name() string          { return t.name }
+func (t *ListType) Nullable() bool        { return t.nullable }
+func (t *ListType) Name() string          { return "[" + t.ofType.Name() + "]" }
+func (t *InputObjectType) Nullable() bool { return t.nullable }
+func (t *InputObjectType) Name() string {
+	buf := &bytes.Buffer{}
+	buf.WriteString("{")
+	first := true
+	for k, v := range t.fields {
+		if !first {
+			buf.WriteString(",")
+		}
+
+		buf.WriteString(k)
+		buf.WriteString(":")
+		buf.WriteString(v.Name())
+		first = false
+	}
+	buf.WriteString("}")
+	return buf.String()
+}
+
+// Private interfaces
+
+func (*FragmentDefinition) definition()  {}
+func (*OperationDefinition) definition() {}
+func (*ScalarDefinition) definition()    {}
+func (*EnumDefinition) definition()      {}
+func (*ObjectDefinition) definition()    {}
+func (*InterfaceDefinition) definition() {}
+func (*UnionDefinition) definition()     {}
+
+func (*Field) selection()              {}
+func (*FragmentSpread) selection()     {}
+func (*FragmentDefinition) selection() {}

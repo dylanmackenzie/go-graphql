@@ -69,7 +69,7 @@ func (l *lexer) scanIgnored() (tok token, lit string) {
 	return tokenIgnored, buf.String()
 }
 
-func (l *lexer) scanName() (tok token, lit string) {
+func (l *lexer) scanIdent() (tok token, lit string) {
 	buf := new(bytes.Buffer)
 
 	// Consume first character /[_a-zA-Z]/
@@ -82,7 +82,7 @@ func (l *lexer) scanName() (tok token, lit string) {
 	}
 
 	l.unread()
-	return tokenName, buf.String()
+	return tokenIdent, buf.String()
 }
 
 func (l *lexer) scanNumber() (tok token, lit string) {
@@ -146,6 +146,17 @@ func (l *lexer) scanNumber() (tok token, lit string) {
 	return tokenType, buf.String()
 }
 
+func (l *lexer) scanComment() (tok token, lit string) {
+	buf := new(bytes.Buffer)
+
+	for ch := l.read(); !isLineTerminator(ch); ch = l.read() {
+		buf.WriteRune(ch)
+	}
+
+	l.unread()
+	return tokenComment, buf.String()
+}
+
 func (l *lexer) scanString() (tok token, lit string) {
 	buf := new(bytes.Buffer)
 
@@ -184,15 +195,18 @@ func (l *lexer) scan() (tok token, lit string) {
 		tok, lit = l.scanIgnored()
 	case isLetter(ch) || ch == '_':
 		l.unread()
-		tok, lit = l.scanName()
+		tok, lit = l.scanIdent()
 	case isDigit(ch) || ch == '-':
 		l.unread()
 		tok, lit = l.scanNumber()
+	case ch == '#':
+		// No need to unread as we don't care about the #
+		tok, lit = l.scanComment()
 	case ch == '"':
 		l.unread()
 		tok, lit = l.scanString()
 	case ch == '$':
-		_, lit = l.scanName()
+		_, lit = l.scanIdent()
 		tok = tokenVariableValue
 	case ch == eof:
 		tok, lit = tokenEOF, ""
@@ -204,6 +218,8 @@ func (l *lexer) scan() (tok token, lit string) {
 		tok, lit = tokenRightParen, ")"
 	case ch == ':':
 		tok, lit = tokenColon, ":"
+	case ch == '|':
+		tok, lit = tokenPipe, "|"
 	case ch == '=':
 		tok, lit = tokenEqual, "="
 	case ch == '@':

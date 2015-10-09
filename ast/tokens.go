@@ -20,8 +20,10 @@ const (
 	tokenWhitespace
 	tokenLineTerminator
 
+	tokenComment
+
 	// Tokens
-	tokenName // /[_A-Za-z][_0-9A-Za-z]*/
+	tokenIdent // /[_A-Za-z][_0-9A-Za-z]*/
 
 	// Values
 	tokenVariableValue
@@ -38,6 +40,7 @@ const (
 	tokenColon
 	tokenDollar
 	tokenEqual
+	tokenPipe
 	tokenExclam
 	tokenLeftBracket
 	tokenRightBracket

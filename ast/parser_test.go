@@ -128,6 +128,30 @@ var parseTests = map[string]ParseTest{
 			}
 		}
 	`},
+	"ScalarType": {`
+		scalar URL String
+	`},
+	"EnumType": {`
+		enum Movie { NEWHOPE, EMPIRE, JEDI }
+	`},
+	"UnionType": {`
+		union Animal = Cat | Dog
+	`},
+	"InterfaceType": {`
+		interface Entity {
+			id: Id!
+			permalink: URL
+		}
+	`},
+	"ObjectType": {`
+		type User implements Entity {
+			id: Id!
+			permalink: URL
+
+			tracks(first: Int, after: Id, last: Int, before: Id): TrackConnection
+			playlists(first: Int, after: Id, last: Int, before: Id): PlaylistConnection
+		}
+	`},
 }
 
 func TestParser(t *testing.T) {

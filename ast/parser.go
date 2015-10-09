@@ -25,14 +25,14 @@ func Reader(r io.Reader) (Document, error) {
 
 		// Ensure that shorthand is the only definition in the document
 		if !lex.Expect(tokenEOF) {
-			return doc, errors.New("Shorthand definition must alone in document")
+			return doc, errors.New("Shorthand definition must be alone in document")
 		}
 
 		return doc, nil
 	}
 
 	// Otherwise we have a normal document
-	for lex.Optional(tokenName) {
+	for lex.Optional(tokenIdent) {
 		switch _, lit := lex.last(); lit {
 		case "query", "mutation":
 			def := &OperationDefinition{}
@@ -46,8 +46,38 @@ func Reader(r io.Reader) (Document, error) {
 			if err := parseFragmentDefinition(def, lex); err != nil {
 				return doc, err
 			}
+		case "scalar":
+			def := &ScalarDefinition{}
+			doc.Definitions = append(doc.Definitions, def)
+			if err := parseScalarDefinition(def, lex); err != nil {
+				return doc, err
+			}
+		case "enum":
+			def := &EnumDefinition{Values: make(map[string]int)}
+			doc.Definitions = append(doc.Definitions, def)
+			if err := parseEnumDefinition(def, lex); err != nil {
+				return doc, err
+			}
+		case "union":
+			def := &UnionDefinition{}
+			doc.Definitions = append(doc.Definitions, def)
+			if err := parseUnionDefinition(def, lex); err != nil {
+				return doc, err
+			}
+		case "interface":
+			def := &InterfaceDefinition{}
+			doc.Definitions = append(doc.Definitions, def)
+			if err := parseInterfaceDefinition(def, lex); err != nil {
+				return doc, err
+			}
+		case "type":
+			def := &ObjectDefinition{}
+			doc.Definitions = append(doc.Definitions, def)
+			if err := parseObjectDefinition(def, lex); err != nil {
+				return doc, err
+			}
 		default:
-			return doc, errors.New("Beginning of definition not one of query, mutation or fragment")
+			return doc, errors.New("Invalid identifier to begin definition")
 		}
 	}
 
@@ -60,7 +90,7 @@ func Reader(r io.Reader) (Document, error) {
 }
 
 func parseOperationDefinition(def *OperationDefinition, lex *lexer) error {
-	if !lex.Assert(tokenName) {
+	if !lex.Assert(tokenIdent) {
 		panic("ParseOperationDefinition called without a name token")
 	}
 
@@ -75,7 +105,7 @@ func parseOperationDefinition(def *OperationDefinition, lex *lexer) error {
 	}
 
 	// Name
-	if lex.Expect(tokenName) {
+	if lex.Expect(tokenIdent) {
 		_, def.Name = lex.last()
 	} else {
 		return errors.New("Expected Name in Operation Definition")
@@ -104,7 +134,7 @@ func parseOperationDefinition(def *OperationDefinition, lex *lexer) error {
 }
 
 func parseFragmentDefinition(def *FragmentDefinition, lex *lexer) error {
-	if !lex.Assert(tokenName) {
+	if !lex.Assert(tokenIdent) {
 		panic("parseFragmentDefinition called without name")
 	}
 
@@ -112,26 +142,26 @@ func parseFragmentDefinition(def *FragmentDefinition, lex *lexer) error {
 	if _, lit := lex.last(); lit == "on" {
 		// If we're parsing an inline fragment, we don't have a name so
 		// skip directly to the type
-		goto inline
+		goto inlineFragment
 	} else if lit != "fragment" {
 		panic("parseFragmentDefinition must be called with 'fragment' or 'on'")
 	}
 
 	// Name
-	if lex.Expect(tokenName) {
+	if lex.Expect(tokenIdent) {
 		_, def.Name = lex.last()
 	} else {
 		return errors.New("No name for fragment")
 	}
 
-	if tok, lit := lex.Advance(); tok != tokenName || lit != "on" {
+	if tok, lit := lex.Advance(); tok != tokenIdent || lit != "on" {
 		return errors.New("Fragment name must be followed by 'on'")
 	}
 
-inline:
+inlineFragment:
 
 	// Type
-	if lex.Expect(tokenName) {
+	if lex.Expect(tokenIdent) {
 		_, def.Type = lex.last()
 	} else {
 		return errors.New("Fragment definition must be on a type")
@@ -164,7 +194,7 @@ func parseSelectionSet(set *SelectionSet, lex *lexer) error {
 			return errors.New(lit)
 		case tokenEOF:
 			return errors.New("Unclosed selection set")
-		case tokenName:
+		case tokenIdent:
 			field := &Field{}
 			*set = append(*set, field)
 			if err := parseField(field, lex); err != nil {
@@ -200,7 +230,7 @@ func parseSelectionSet(set *SelectionSet, lex *lexer) error {
 
 func parseField(field *Field, lex *lexer) error {
 	// Sanity check
-	if !lex.Assert(tokenName) {
+	if !lex.Assert(tokenIdent) {
 		panic("parseField called without name")
 	}
 
@@ -208,7 +238,7 @@ func parseField(field *Field, lex *lexer) error {
 	_, field.Name = lex.last()
 	if lex.Optional(tokenColon) {
 		field.Alias = field.Name
-		if lex.Expect(tokenName) {
+		if lex.Expect(tokenIdent) {
 			_, field.Name = lex.last()
 		} else {
 			return errors.New("Alias without a name")
@@ -246,7 +276,7 @@ func parseFragmentSpread(frag *FragmentSpread, lex *lexer) error {
 	}
 
 	// Name
-	if !lex.Expect(tokenName) {
+	if !lex.Expect(tokenIdent) {
 		return errors.New("Invalid Fragment Name in spread")
 	}
 
@@ -277,7 +307,7 @@ func parseArguments(args *Arguments, lex *lexer) error {
 			return errors.New(lit)
 		case tokenEOF:
 			return errors.New("Unexpected end of file")
-		case tokenName:
+		case tokenIdent:
 			arg := &Argument{Key: lit}
 
 			if !lex.Expect(tokenColon) {
@@ -323,7 +353,7 @@ func parseVariableDefinitions(vars *Variables, lex *lexer) error {
 
 			// Type name
 			switch tok, lit := lex.Advance(); tok {
-			case tokenName:
+			case tokenIdent:
 				v.Type = lit
 			case tokenLeftBracket:
 				return errors.New("TODO: List not yet supported")
@@ -365,7 +395,7 @@ func parseDirectives(dirs *Directives, lex *lexer) error {
 		dir := &Directive{}
 
 		// Name
-		if lex.Expect(tokenName) {
+		if lex.Expect(tokenIdent) {
 			_, dir.Name = lex.last()
 		} else {
 			return errors.New("Expected Name in Operation Definition")
@@ -402,7 +432,7 @@ func parseValue(lex *lexer) (Value, error) {
 		return StringValue(lit), nil
 	case tokenVariableValue:
 		return VariableValue(lit), nil
-	case tokenName:
+	case tokenIdent:
 		if lit == "true" || lit == "false" {
 			return BooleanValue(lit == "true"), nil
 		} else if lit == "null" {
@@ -452,7 +482,7 @@ func parseObjectValue(lex *lexer) (ObjectValue, error) {
 			return val, nil
 		}
 
-		if !lex.Expect(tokenName) {
+		if !lex.Expect(tokenIdent) {
 			return val, errors.New("ObjectValue must have a key")
 		}
 
