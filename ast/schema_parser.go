@@ -14,11 +14,7 @@ func parseObjectDefinition(def *ObjectDefinition, lex *lexer) error {
 	_, def.Name = lex.last()
 
 	// Implements
-	if lex.Optional(tokenIdent) {
-		if _, lit := lex.last(); lit != "implements" {
-			return errors.New("Type declaration must be followed by 'implements' or list of fields")
-		}
-
+	if lex.Optional(tokenColon) {
 		cnt := 0
 		for lex.Optional(tokenIdent) {
 			cnt++
@@ -27,7 +23,7 @@ func parseObjectDefinition(def *ObjectDefinition, lex *lexer) error {
 		}
 
 		if cnt == 0 {
-			return errors.New("'implements' must be followed by one or more interface names")
+			return errors.New("Implements list must have more than one name")
 		}
 	}
 
@@ -133,12 +129,12 @@ func parseUnionDefinition(def *UnionDefinition, lex *lexer) error {
 	}
 
 	cnt := 0
-	for lex.Optional(tokenIdent) {
+	for lex.Expect(tokenIdent) {
 		_, ident := lex.last()
-		def.Members = append(def.Members, ident)
+		def.Members = append(def.Members, &BaseType{name: ident, nullable: false})
 		cnt++
 
-		if !lex.Expect(tokenPipe) {
+		if !lex.Optional(tokenPipe) {
 			break
 		}
 	}
@@ -239,7 +235,7 @@ func parseArgumentDeclaration(args *ArgumentDeclarations, lex *lexer) error {
 	}
 }
 
-func parseType(lex *lexer) (Type, error) {
+func parseType(lex *lexer) (TypeDescriptor, error) {
 	switch tok, lit := lex.Advance(); tok {
 	case tokenIdent:
 		t := &BaseType{name: lit}
@@ -253,7 +249,7 @@ func parseType(lex *lexer) (Type, error) {
 			return t, err
 		}
 
-		t.ofType = ofType
+		t.OfType = ofType
 		if !lex.Expect(tokenRightBracket) {
 			return t, errors.New("Unclosed List type")
 		}
@@ -281,7 +277,7 @@ func parseType(lex *lexer) (Type, error) {
 			if err != nil {
 				return t, err
 			}
-			t.fields[key] = item
+			t.Fields[key] = item
 		}
 
 		if !lex.Expect(tokenRightCurly) {

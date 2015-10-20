@@ -1,7 +1,9 @@
 package schema
 
+import "testing"
+
 func shouldPanic(name string, t *testing.T) {
-	r := recover(); r == nil {
+	if r := recover(); r == nil {
 		t.Errorf("Test '%s' should have panicked", name)
 	}
 }

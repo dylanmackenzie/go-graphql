@@ -144,7 +144,7 @@ var parseTests = map[string]ParseTest{
 		}
 	`},
 	"ObjectType": {`
-		type User implements Entity {
+		type User : Entity {
 			id: Id!
 			permalink: URL
 
@@ -156,7 +156,7 @@ var parseTests = map[string]ParseTest{
 
 func TestParser(t *testing.T) {
 	for name, test := range parseTests {
-		actual, err := Reader(strings.NewReader(test.input))
+		actual, err := FromReader(strings.NewReader(test.input))
 		if err != nil {
 			t.Errorf("Error %s: %s", name, err)
 			json, _ := json.MarshalIndent(actual, "", "  ")

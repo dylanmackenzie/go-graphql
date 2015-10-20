@@ -1,0 +1,41 @@
+5 Validation
+  1 Operations x
+    1 Named Operation Definitions x
+      1 Operation Name Uniqueness x
+    2 Anonymous Operation Definitions x
+      1 Lone Anonymous Operation x
+  2 Fields
+    1 Field Selections on Objects, Interfaces, and Unions Types
+    2 Field Selection Merging
+    3 Leaf Field Selections
+  3 Arguments
+    1 Argument Names
+    2 Argument Uniqueness
+    3 Argument Values Type Correctness
+      1 Compatible Values
+      2 Required Arguments
+  4 Fragments
+    1 Fragment Declarations
+      1 Fragment Name Uniqueness x
+      2 Fragment Spread Type Existence
+      3 Fragments On Composite Types
+      4 Fragments Must Be Used
+    2 Fragment Spreads
+      1 Fragment spread target defined
+      2 Fragment spreads must not form cycles
+      3 Fragment spread is possible
+        1 Object Spreads In Object Scope
+        2 Abstract Spreads in Object Scope
+        3 Object Spreads In Abstract Scope
+        4 Abstract Spreads in Abstract Scope
+  5 Values
+    1 Input Object Field Uniqueness
+  6 Directives
+    1 Directives Are Defined
+  7 Operations
+    1 Variables
+      1 Variable Default Values Are Correctly Typed
+      2 Variables Are Input Types
+      3 All Variable Uses Defined
+      4 All Variables Used
+      5 All Variable Usages are Allowed

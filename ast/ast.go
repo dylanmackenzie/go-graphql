@@ -132,15 +132,26 @@ type ListValue []Value            // A list of one of the above values
 type ObjectValue map[string]Value // A map of name-value pairs
 
 func (v VariableValue) Value() interface{} { return v }
-func (v IntValue) Value() interface{}      { return v }
-func (v FloatValue) Value() interface{}    { return v }
-func (v StringValue) Value() interface{}   { return v }
+func (v IntValue) Value() interface{}      { return int(v) }
+func (v FloatValue) Value() interface{}    { return float64(v) }
+func (v StringValue) Value() interface{}   { return string(v) }
 func (v EnumValue) Value() interface{}     { return v }
-func (v BooleanValue) Value() interface{}  { return v }
+func (v BooleanValue) Value() interface{}  { return bool(v) }
 func (v ListValue) Value() interface{}     { return v }
 func (v ObjectValue) Value() interface{}   { return v }
 
 // Types
+
+type TypeDefinition interface {
+	Node
+	TypeName() string
+	typeDefinition()
+}
+
+type AbstractTypeDefinition interface {
+	TypeDefinition
+	Field(string) (*TypeField, bool)
+}
 
 type ScalarDefinition struct {
 	Name string
@@ -165,20 +176,26 @@ type InterfaceDefinition struct {
 
 type UnionDefinition struct {
 	Name    string
-	Members []string
+	Members []TypeDescriptor
 }
 
 type TypeFields []TypeField
 type TypeField struct {
 	Name      string
-	Type      Type
+	Type      TypeDescriptor
 	Arguments ArgumentDeclarations
+
+	// TODO: This field will be filled out when the query is actually
+	// resolved, not when it is parsed. This avoids looking up the type
+	// in the schema, but requires an extra pass before any work is
+	// done.
+	Definition TypeDefinition
 }
 
 type ArgumentDeclarations []ArgumentDeclaration
 type ArgumentDeclaration struct {
 	Key  string
-	Type Type
+	Type TypeDescriptor
 }
 
 func (obj *InterfaceDefinition) Field(name string) (*TypeField, bool) {
@@ -197,9 +214,10 @@ func findTypeField(fields []TypeField, name string) (*TypeField, bool) {
 	return nil, false
 }
 
-// Input types
-
-type Type interface {
+// A TypeDescriptor is a reference to a TypeDefinition which could be a
+// nullable version of that type, a list of that type, an input object
+// containing several types, or a combination of any of the above.
+type TypeDescriptor interface {
 	Name() string
 	Nullable() bool
 }
@@ -210,25 +228,52 @@ type BaseType struct {
 }
 
 type ListType struct {
-	ofType   Type
+	OfType   TypeDescriptor
 	nullable bool
 }
 
 type InputObjectType struct {
-	fields   map[string]Type
+	Fields   map[string]TypeDescriptor
 	nullable bool
 }
 
-func (t *BaseType) Nullable() bool        { return t.nullable }
-func (t *BaseType) Name() string          { return t.name }
-func (t *ListType) Nullable() bool        { return t.nullable }
-func (t *ListType) Name() string          { return "[" + t.ofType.Name() + "]" }
-func (t *InputObjectType) Nullable() bool { return t.nullable }
+// Interface implementations
+
+func (*FragmentDefinition) definition()  {}
+func (*OperationDefinition) definition() {}
+func (*ScalarDefinition) definition()    {}
+func (*EnumDefinition) definition()      {}
+func (*ObjectDefinition) definition()    {}
+func (*InterfaceDefinition) definition() {}
+func (*UnionDefinition) definition()     {}
+
+func (d *ScalarDefinition) typeDefinition()    {}
+func (d *EnumDefinition) typeDefinition()      {}
+func (d *ObjectDefinition) typeDefinition()    {}
+func (d *InterfaceDefinition) typeDefinition() {}
+func (d *UnionDefinition) typeDefinition()     {}
+
+func (d *ScalarDefinition) TypeName() string    { return d.Name }
+func (d *EnumDefinition) TypeName() string      { return d.Name }
+func (d *ObjectDefinition) TypeName() string    { return d.Name }
+func (d *InterfaceDefinition) TypeName() string { return d.Name }
+func (d *UnionDefinition) TypeName() string     { return d.Name }
+
+func (*Field) selection()              {}
+func (*FragmentSpread) selection()     {}
+func (*FragmentDefinition) selection() {}
+
+// TODO: InputObject should not have a BaseType method. Maybe separate
+// interface?
+func (t *BaseType) Name() string   { return t.name }
+func (t *BaseType) Nullable() bool { return t.nullable }
+func (t *ListType) Name() string   { return "[" + t.OfType.Name() + "]" }
+func (t *ListType) Nullable() bool { return t.nullable }
 func (t *InputObjectType) Name() string {
 	buf := &bytes.Buffer{}
 	buf.WriteString("{")
 	first := true
-	for k, v := range t.fields {
+	for k, v := range t.Fields {
 		if !first {
 			buf.WriteString(",")
 		}
@@ -241,17 +286,4 @@ func (t *InputObjectType) Name() string {
 	buf.WriteString("}")
 	return buf.String()
 }
-
-// Private interfaces
-
-func (*FragmentDefinition) definition()  {}
-func (*OperationDefinition) definition() {}
-func (*ScalarDefinition) definition()    {}
-func (*EnumDefinition) definition()      {}
-func (*ObjectDefinition) definition()    {}
-func (*InterfaceDefinition) definition() {}
-func (*UnionDefinition) definition()     {}
-
-func (*Field) selection()              {}
-func (*FragmentSpread) selection()     {}
-func (*FragmentDefinition) selection() {}
+func (t *InputObjectType) Nullable() bool { return t.nullable }

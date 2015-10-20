@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-func Reader(r io.Reader) (Document, error) {
+func FromReader(r io.Reader) (Document, error) {
 	lex := newLexer(r)
 	doc := Document{}
 
@@ -77,6 +77,7 @@ func Reader(r io.Reader) (Document, error) {
 				return doc, err
 			}
 		default:
+			panic(lit)
 			return doc, errors.New("Invalid identifier to begin definition")
 		}
 	}

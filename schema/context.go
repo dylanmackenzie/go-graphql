@@ -1,24 +1,44 @@
-package execution
+package schema
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
 
 	"dylanmackenzie.com/graphql/ast"
-	"dylanmackenzie.com/graphql/schema"
 )
+
+type errorList []error
+
+func (e errorList) Error() string {
+
+	buf := new(bytes.Buffer)
+	for _, err := range e {
+		buf.WriteString(err.Error())
+		buf.WriteByte('\n')
+	}
+
+	return buf.String()
+}
+
+func (e errorList) Err() error {
+	if len(e) == 0 {
+		return nil
+	}
+
+	return e
+}
 
 type context struct {
 	// Schema
 
-	Schema *schema.Schema            // A reference to the graphql type system.
-	Root   *schema.ObjectDescription // The root object in the schema responsible for the active operation.
+	Schema *Schema               // A reference to the graphql type system.
+	Root   *ast.ObjectDefinition // The root object in the schema responsible for the active operation.
 
 	// Document
 
-	Operation      *ast.OperationDefinition           // The active operation.
-	VariableValues map[string]ast.Value               // The variables supplied to the graphql request.
-	Fragments      map[string]*ast.FragmentDefinition // The fragments present in the graphql document.
+	Operation *ast.OperationDefinition           // The active operation.
+	Variables map[string]ast.Value               // The variables supplied to the graphql request.
+	Fragments map[string]*ast.FragmentDefinition // The fragments present in the graphql document.
 
 	// Response
 
@@ -27,22 +47,28 @@ type context struct {
 
 	// Error Handling
 
-	Errors []error // The list of errors encountered while processing the request.
+	Errors errorList // The list of errors encountered while processing the request.
 
 	// A boolean indicating whether the execution should panic
 	// immediately after the first error it encounters or continue
 	// parsing the entire document. Should be set to true only for
 	// development purposes.
-	lazyPanic bool
+	lazyPanic       bool
+	serialExecution bool
 }
 
-func NewContext(sch *schema.Schema) *context {
+func NewContext(sch *Schema) *context {
 	return &context{
-		Schema:         sch,
-		VariableValues: make(map[string]ast.Value),
-		Fragments:      make(map[string]*ast.FragmentDefinition),
-		Errors:         make([]Errors, 0),
+		Schema:    sch,
+		Variables: make(map[string]ast.Value),
+		Fragments: make(map[string]*ast.FragmentDefinition),
+		Errors:    make([]error, 0),
 	}
+}
+
+func (ctx *context) addErrorf(s string, v ...interface{}) {
+	ctx.addError(fmt.Errorf(s, v...))
+
 }
 
 func (ctx *context) addError(err error) {
@@ -52,25 +78,21 @@ func (ctx *context) addError(err error) {
 	}
 }
 
-func report(ctx Context, s string, v ...interface{}) {
-	ctx.addError(fmt.Errorf(s, v...))
-}
-
 // getOperationRootType finds the appropriate root in the schema for the
 // active GraphQL operation and stores it in ctx.Root
 func (ctx *context) getOperationRootType() {
 	switch ctx.Operation.OpType {
-	case QUERY:
+	case ast.QUERY:
 		ctx.Root = ctx.Schema.QueryRoot
-	case MUTATION:
+	case ast.MUTATION:
 		ctx.Root = ctx.Schema.MutationRoot
 	default:
 		// This should be caught in the parsing stage
-		report(ctx, "Operation Type must be either query or mutation")
+		ctx.addErrorf("Operation Type must be either query or mutation")
 	}
 
 	if ctx.Root == nil {
-		report(ctx, "Schema does not provide a root object for the selected operation")
+		ctx.addErrorf("Schema does not provide a root object for the selected operation")
 	}
 }
 
@@ -85,16 +107,16 @@ func (ctx *context) processDefinitions(doc *ast.Document, active string) {
 		switch def := t.(type) {
 		case *ast.OperationDefinition:
 			if foundOps[def.Name] {
-				report(ctx, "Multiple operations named '%s'", def.Name)
+				ctx.addErrorf("Multiple operations named '%s'", def.Name)
 				break
 			}
 
 			opCount++
-			foundOps[def.Name] = def
+			foundOps[def.Name] = true
 
 			// Check unnamed fragment count
 			if def.Name == "" && opCount != 1 {
-				report(ctx, "Unnamed operation must be the only one in a document")
+				ctx.addErrorf("Unnamed operation must be the only one in a document")
 			}
 
 			if def.Name == active {
@@ -103,7 +125,7 @@ func (ctx *context) processDefinitions(doc *ast.Document, active string) {
 
 		case *ast.FragmentDefinition:
 			if _, ok := ctx.Fragments[def.Name]; ok {
-				report(ctx, "Multiple fragments named '%s'", def.Name)
+				ctx.addErrorf("Multiple fragments named '%s'", def.Name)
 			} else {
 				ctx.Fragments[def.Name] = def
 			}
@@ -112,9 +134,9 @@ func (ctx *context) processDefinitions(doc *ast.Document, active string) {
 
 	if ctx.Operation == nil {
 		if active == "" {
-			report(ctx, "Expecting unnamed definition, but none found")
+			ctx.addErrorf("Expecting unnamed definition, but none found")
 		} else {
-			report(ctx, "Expecting definition named '%s', but none found", active)
+			ctx.addErrorf("Expecting definition named '%s', but none found", active)
 		}
 	}
 }
